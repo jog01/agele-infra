@@ -6,8 +6,8 @@ Agele runs as five workloads on one Kubernetes cluster per environment, with Pos
 
 | | staging | production |
 |---|---|---|
-| Web | `staging.agele.xyz` | `agele.xyz`, `www.agele.xyz` |
-| API and websocket | `api.staging.agele.xyz`, `/ws` | `api.agele.xyz`, `/ws` |
+| Web | `staging.agele.xyz` | `agele.xyz` (`www` redirects to it) |
+| API and websocket | `staging-api.agele.xyz`, `/ws` | `api.agele.xyz`, `/ws` |
 | Cluster | `agele-staging` (own VPC `10.1.0.0/16`) | `agele-production` (own VPC `10.0.0.0/16`) |
 | NAT gateways | 1 | 1 per zone |
 | Postgres | 2 instances, 20 Gi, 7-day backups | 3 instances, 50 Gi, 30-day backups |

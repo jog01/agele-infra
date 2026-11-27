@@ -32,7 +32,7 @@ app.kubernetes.io/name: agele-{{ . }}
 - name: CORS_ORIGINS
   value: "https://{{ .Values.domain }}"
 - name: HELIUS_WEBHOOK_URL
-  value: "https://api.{{ .Values.domain }}/v1/webhooks/helius"
+  value: "https://{{ .Values.apiHost | default (printf "api.%s" .Values.domain) }}/v1/webhooks/helius"
 {{- end }}
 
 {{- define "agele.backendEnvFrom" -}}

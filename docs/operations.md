@@ -15,7 +15,7 @@ flowchart LR
 
 1. The publish workflow in `jog01/agele` or `jog01/agele-web` pushes `sha-<commit>` images.
 2. Bump `image.backendTag` or `image.webTag` in `environments/staging/agele.yaml`, merge.
-3. Argo CD runs `agele-migrate`, then rolls the Deployments. Check `https://api.staging.agele.xyz/health`.
+3. Argo CD runs `agele-migrate`, then rolls the Deployments. Check `https://staging-api.agele.xyz/health`.
 4. Same bump in `environments/production/agele.yaml`.
 
 Migrations must stay backward compatible with the previous release (add columns before using them, drop them a release later), because old pods serve while new ones start.

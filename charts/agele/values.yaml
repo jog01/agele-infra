@@ -1,5 +1,7 @@
 # Set per environment in environments/<env>/agele.yaml.
 domain: agele.xyz
+# Default api.<domain>. Keep it one level under the zone so Universal SSL covers it.
+apiHost: ""
 
 image:
   # One image per Dockerfile target in jog01/agele: <repository>-<target>:<tag>.

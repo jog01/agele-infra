@@ -66,7 +66,7 @@ module "tunnel" {
   zone_id             = data.cloudflare_zone.this.zone_id
   name                = "agele-staging"
   web_hostname        = "staging.agele.xyz"
-  api_hostname        = "api.staging.agele.xyz"
+  api_hostname        = "staging-api.agele.xyz"
   extra_web_hostnames = []
 }
 

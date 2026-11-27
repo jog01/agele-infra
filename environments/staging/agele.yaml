@@ -1,4 +1,6 @@
 domain: staging.agele.xyz
+# api.staging.agele.xyz is two levels deep, outside the free Universal SSL certificate.
+apiHost: staging-api.agele.xyz
 image:
   # Git SHAs of jog01/agele and jog01/agele-web. Bumped by PR from their publish workflows.
   backendTag: "sha-0000000"
