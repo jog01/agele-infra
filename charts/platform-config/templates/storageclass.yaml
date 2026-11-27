@@ -1,0 +1,23 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ .Values.storageClass.name }}
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: {{ ternary "ebs.csi.aws.com" "pd.csi.storage.gke.io" (eq .Values.cloud "aws") }}
+reclaimPolicy: Retain
+allowVolumeExpansion: true
+volumeBindingMode: WaitForFirstConsumer
+parameters:
+  {{- if eq .Values.cloud "aws" }}
+  type: gp3
+  encrypted: "true"
+  {{- with .Values.storageClass.kmsKeyId }}
+  kmsKeyId: {{ . }}
+  {{- end }}
+  {{- else }}
+  type: pd-balanced
+  {{- with .Values.storageClass.kmsKeyId }}
+  disk-encryption-kms-key: {{ . }}
+  {{- end }}
+  {{- end }}

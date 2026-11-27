@@ -1,0 +1,5 @@
+# Copy to backend.hcl. State bucket and lock are created once by hand (docs/go-live.md step 1).
+bucket       = "agele-terraform-state"
+region       = "us-east-1"
+encrypt      = true
+use_lockfile = true

@@ -1,0 +1,12 @@
+domain: agele.xyz
+image:
+  # Git SHAs of jog01/agele and jog01/agele-web. Bumped by PR from their publish workflows.
+  backendTag: "sha-0000000"
+  webTag: "production-sha-0000000"
+config:
+  LOG_LEVEL: info
+components:
+  api: { autoscaling: { minReplicas: 2 } }
+  ws: { autoscaling: { minReplicas: 2 } }
+  worker: { autoscaling: { minReplicas: 2 } }
+  web: { autoscaling: { minReplicas: 2 } }

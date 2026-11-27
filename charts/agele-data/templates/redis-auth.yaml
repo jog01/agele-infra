@@ -1,0 +1,35 @@
+{{- $r := .Values.redis }}
+{{- if and $r.auth.generate (not $r.auth.existingSecret) }}
+apiVersion: generators.external-secrets.io/v1alpha1
+kind: Password
+metadata:
+  name: {{ $r.name }}-password
+  labels:
+    {{- include "agele-data.labels" . | nindent 4 }}
+spec:
+  length: 48
+  digits: 8
+  symbols: 0
+  noUpper: false
+  allowRepeat: true
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: {{ $r.name }}-auth
+  labels:
+    {{- include "agele-data.labels" . | nindent 4 }}
+spec:
+  # Generated once; delete the Secret to rotate (then restart Redis and the apps).
+  refreshInterval: "0"
+  target:
+    name: {{ $r.name }}-auth
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  dataFrom:
+    - sourceRef:
+        generatorRef:
+          apiVersion: generators.external-secrets.io/v1alpha1
+          kind: Password
+          name: {{ $r.name }}-password
+{{- end }}

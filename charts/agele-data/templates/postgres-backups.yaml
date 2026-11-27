@@ -1,0 +1,44 @@
+{{- $pg := .Values.postgres }}
+{{- if $pg.backup.enabled }}
+{{- if not $pg.backup.destinationPath }}
+{{- fail "postgres.backup.destinationPath is required when backups are enabled" }}
+{{- end }}
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: {{ $pg.name }}-backups
+  labels:
+    {{- include "agele-data.labels" . | nindent 4 }}
+spec:
+  retentionPolicy: {{ $pg.backup.retention | quote }}
+  configuration:
+    destinationPath: {{ $pg.backup.destinationPath }}
+    s3Credentials:
+      {{- if $pg.backup.inheritFromIAMRole }}
+      inheritFromIAMRole: true
+      {{- end }}
+    wal:
+      compression: gzip
+      encryption: {{ $pg.backup.encryption }}
+      maxParallel: 4
+    data:
+      compression: gzip
+      encryption: {{ $pg.backup.encryption }}
+      jobs: 2
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: {{ $pg.name }}-daily
+  labels:
+    {{- include "agele-data.labels" . | nindent 4 }}
+spec:
+  cluster:
+    name: {{ $pg.name }}
+  schedule: {{ $pg.backup.schedule | quote }}
+  immediate: true
+  backupOwnerReference: self
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
+{{- end }}

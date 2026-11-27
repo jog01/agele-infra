@@ -1,0 +1,3 @@
+global:
+  # Tailnet hostname of the argocd-staging Ingress (Tailscale admin console > Machines). Replace TAILNET.
+  domain: argocd-staging.TAILNET.ts.net

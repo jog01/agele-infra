@@ -1,0 +1,118 @@
+{{- $r := .Values.redis }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $r.name }}
+  labels:
+    {{- include "agele-data.labels" . | nindent 4 }}
+    app.kubernetes.io/name: {{ $r.name }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ $r.name }}
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $r.name }}-config
+  labels:
+    {{- include "agele-data.labels" . | nindent 4 }}
+data:
+  redis.conf: |
+    appendonly yes
+    appendfsync everysec
+    save 900 1
+    maxmemory {{ $r.maxmemory }}
+    maxmemory-policy noeviction
+    protected-mode yes
+    rename-command FLUSHALL ""
+    rename-command FLUSHDB ""
+    rename-command DEBUG ""
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $r.name }}
+  labels:
+    {{- include "agele-data.labels" . | nindent 4 }}
+    app.kubernetes.io/name: {{ $r.name }}
+spec:
+  serviceName: {{ $r.name }}
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $r.name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ $r.name }}
+        app.kubernetes.io/part-of: agele
+        app.kubernetes.io/component: redis
+      annotations:
+        checksum/config: {{ printf "%s/%v" $r.maxmemory $r.image | sha256sum | trunc 16 }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile: { type: RuntimeDefault }
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: redis
+          image: {{ $r.image }}
+          # The password goes into a memory-backed file so it never shows in process arguments.
+          command:
+            - sh
+            - -c
+            - umask 077 && printf 'requirepass %s\n' "$REDIS_PASSWORD" > /run/redis/auth.conf && exec redis-server /etc/redis/redis.conf --include /run/redis/auth.conf
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "agele-data.redisSecret" . }}
+                  key: password
+            - name: REDISCLI_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "agele-data.redisSecret" . }}
+                  key: password
+          ports:
+            - name: redis
+              containerPort: 6379
+          readinessProbe:
+            exec: { command: ["redis-cli", "ping"] }
+            periodSeconds: 5
+          livenessProbe:
+            exec: { command: ["redis-cli", "ping"] }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            {{- toYaml $r.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: config, mountPath: /etc/redis }
+            - { name: run, mountPath: /run/redis }
+      volumes:
+        - name: run
+          emptyDir: { medium: Memory, sizeLimit: 1Mi }
+        - name: config
+          configMap:
+            name: {{ $r.name }}-config
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: {{ $r.storage.storageClass }}
+        resources:
+          requests:
+            storage: {{ $r.storage.size }}

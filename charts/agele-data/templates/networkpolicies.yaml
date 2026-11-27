@@ -1,0 +1,62 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $np := .Values.networkPolicy }}
+{{- $pg := .Values.postgres }}
+# Only labelled app pods, the operator, other instances, monitoring and the tailnet proxy reach Postgres.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $pg.name }}-ingress
+  labels:
+    {{- include "agele-data.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: {{ $pg.name }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- toYaml .Values.clientLabels.postgres | nindent 14 }}
+      ports: [{ port: 5432, protocol: TCP }]
+    - from:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: {{ $pg.name }}
+      ports: [{ port: 5432, protocol: TCP }, { port: 8000, protocol: TCP }]
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $np.operatorNamespace }}
+      ports: [{ port: 5432, protocol: TCP }, { port: 8000, protocol: TCP }]
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $np.monitoringNamespace }}
+      ports: [{ port: 9187, protocol: TCP }]
+    {{- if $pg.tailnet.enabled }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $np.tailscaleNamespace }}
+      ports: [{ port: 5432, protocol: TCP }]
+    {{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Values.redis.name }}-ingress
+  labels:
+    {{- include "agele-data.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.redis.name }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- toYaml .Values.clientLabels.redis | nindent 14 }}
+      ports: [{ port: 6379, protocol: TCP }]
+{{- end }}

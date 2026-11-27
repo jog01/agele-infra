@@ -1,0 +1,6 @@
+apiVersion: v2
+name: platform-config
+description: "Cluster-wide config - encrypted StorageClass, Bitwarden ClusterSecretStore, operator credentials and Tailscale-only admin ingress."
+type: application
+version: 0.1.0
+kubeVersion: ">=1.30.0-0"

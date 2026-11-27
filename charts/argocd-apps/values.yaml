@@ -1,0 +1,62 @@
+# Set by bootstrap/<env>.yaml.
+environment: production
+repoURL: https://github.com/jog01/agele-infra.git
+targetRevision: main
+project: default
+# Automated sync with self-heal. Production prunes too, so git is the only way to change the cluster.
+autoSync: true
+prune: true
+
+# Upstream charts, pinned. Renovate bumps these by PR.
+operators:
+  cert-manager:
+    wave: -10
+    namespace: cert-manager
+    repoURL: https://charts.jetstack.io
+    chart: cert-manager
+    version: v1.21.3
+  external-secrets:
+    wave: -9
+    namespace: external-secrets
+    repoURL: https://charts.external-secrets.io
+    chart: external-secrets
+    version: 2.15.0
+  cloudnative-pg:
+    wave: -9
+    namespace: cnpg-system
+    repoURL: https://cloudnative-pg.github.io/charts
+    chart: cloudnative-pg
+    version: 0.29.2
+  kube-prometheus-stack:
+    wave: -9
+    namespace: monitoring
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    version: 94.2.0
+    serverSideApply: true
+  plugin-barman-cloud:
+    wave: -8
+    namespace: cnpg-system
+    repoURL: https://cloudnative-pg.github.io/charts
+    chart: plugin-barman-cloud
+    version: 0.9.0
+  tailscale-operator:
+    wave: -7
+    namespace: tailscale
+    repoURL: https://pkgs.tailscale.com/helmcharts
+    chart: tailscale-operator
+    version: 1.104.7
+  argo-cd:
+    # Argo CD manages its own upgrades after the bootstrap install.
+    wave: -10
+    namespace: argocd
+    repoURL: https://argoproj.github.io/argo-helm
+    chart: argo-cd
+    version: 10.20.0
+    releaseName: argocd
+
+# Charts in this repo, values from environments/<env>/<name>.yaml.
+local:
+  platform-config: { wave: -8, namespace: external-secrets, path: charts/platform-config }
+  agele-data: { wave: -5, namespace: agele, path: charts/agele-data }
+  agele: { wave: 0, namespace: agele, path: charts/agele }

@@ -1,0 +1,10 @@
+postgres:
+  instances: 2
+  storage: { size: 20Gi }
+  backup:
+    # terraform output pg_backup_destination (terraform/envs/staging)
+    region: us-east-1
+    destinationPath: s3://agele-staging-pg-backups/agele-pg
+    retention: 7d
+  tailnet:
+    hostname: agele-pg-staging

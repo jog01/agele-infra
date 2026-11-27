@@ -1,0 +1,148 @@
+# Set per environment in environments/<env>/agele.yaml.
+domain: agele.xyz
+# Default api.<domain>. Keep it one level under the zone so Universal SSL covers it.
+apiHost: ""
+
+image:
+  # One image per Dockerfile target in jog01/agele: <repository>-<target>:<tag>.
+  backendRepository: ghcr.io/jog01/agele
+  # Next.js inlines NEXT_PUBLIC_* at build time, so each environment has its own web image.
+  webRepository: ghcr.io/jog01/agele-web
+  # Git SHA tags only; Argo CD Image Updater or a PR bumps these.
+  backendTag: ""
+  webTag: ""
+  pullPolicy: IfNotPresent
+
+# Non-secret backend configuration (jog01/agele src/config/env.ts).
+config:
+  NODE_ENV: production
+  LOG_LEVEL: info
+  MARKET_DATA_PROVIDER: live
+  ENABLE_MOCK_FEED: "false"
+  JUPITER_BASE_URL: https://api.jup.ag
+  SPONSOR_ENABLED: "false"
+  OTEL_EXPORTER_OTLP_ENDPOINT: ""
+  # Bun writes its transpiler cache to $HOME by default; the root filesystem is read-only.
+  BUN_RUNTIME_TRANSPILER_CACHE_PATH: "0"
+
+# Secret backend configuration, synced from Bitwarden Secrets Manager.
+# Each entry maps an env var to the Bitwarden secret of the same name in the environment's project.
+secrets:
+  storeName: bitwarden
+  refreshInterval: 1h
+  # FEE_PAYER_SECRET is development-only in the backend and is never synced.
+  keys:
+    - SOLANA_RPC_URL
+    - PRIVY_APP_ID
+    - PRIVY_APP_SECRET
+    - PRIVY_VERIFICATION_KEY
+    - HELIUS_API_KEY
+    - HELIUS_WEBHOOK_SECRET
+    - YELLOWSTONE_GRPC_URL
+    - YELLOWSTONE_GRPC_TOKEN
+    - JUPITER_API_KEY
+    - BIRDEYE_API_KEY
+
+postgres:
+  # CloudNativePG creates <cluster>-app with the generated owner credentials.
+  appSecret: agele-pg-app
+  sslmode: require
+redis:
+  host: agele-redis
+  passwordSecret: agele-redis-auth
+
+podSecurityContext:
+  runAsNonRoot: true
+  # The oven/bun image's "bun" user.
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile: { type: RuntimeDefault }
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities: { drop: ["ALL"] }
+
+components:
+  api:
+    enabled: true
+    kind: backend
+    target: api
+    port: 4000
+    otelServiceName: agele-api
+    replicas: 2
+    health: /health
+    resources:
+      requests: { cpu: 250m, memory: 384Mi }
+      limits: { memory: 768Mi }
+    autoscaling: { enabled: true, minReplicas: 2, maxReplicas: 10, cpu: 70 }
+  ws:
+    enabled: true
+    kind: backend
+    target: ws
+    port: 4001
+    otelServiceName: agele-ws
+    replicas: 2
+    health: /health
+    env:
+      WS_PORT: "4001"
+    # Bun.serve closes sockets on SIGTERM; clients reconnect and refetch REST state.
+    terminationGracePeriodSeconds: 30
+    resources:
+      requests: { cpu: 250m, memory: 256Mi }
+      limits: { memory: 512Mi }
+    autoscaling: { enabled: true, minReplicas: 2, maxReplicas: 10, cpu: 60 }
+  worker:
+    enabled: true
+    kind: backend
+    target: worker
+    otelServiceName: agele-worker
+    replicas: 2
+    terminationGracePeriodSeconds: 60
+    resources:
+      requests: { cpu: 250m, memory: 384Mi }
+      limits: { memory: 768Mi }
+    autoscaling: { enabled: true, minReplicas: 2, maxReplicas: 8, cpu: 70 }
+  feed:
+    enabled: true
+    kind: backend
+    target: feed
+    otelServiceName: agele-feed
+    # One replica holds the Redis lease; the second takes over within 15 s.
+    replicas: 2
+    resources:
+      requests: { cpu: 250m, memory: 384Mi }
+      limits: { memory: 768Mi }
+    autoscaling: { enabled: false }
+  web:
+    enabled: true
+    kind: web
+    port: 3000
+    replicas: 2
+    health: /
+    resources:
+      requests: { cpu: 250m, memory: 384Mi }
+      limits: { memory: 768Mi }
+    autoscaling: { enabled: true, minReplicas: 2, maxReplicas: 10, cpu: 70 }
+
+migrations:
+  enabled: true
+  command: ["bun", "src/db/migrate.ts"]
+  backoffLimit: 2
+
+cloudflared:
+  enabled: true
+  image: cloudflare/cloudflared:2026.11.2
+  replicas: 2
+  # Bitwarden secret holding the tunnel token (terraform output tunnel_token).
+  tokenKey: CLOUDFLARE_TUNNEL_TOKEN
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { memory: 256Mi }
+
+networkPolicy:
+  enabled: true
+  monitoringNamespace: monitoring
+
+topologyKey: topology.kubernetes.io/zone

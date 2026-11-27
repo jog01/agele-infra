@@ -1,0 +1,45 @@
+{{- $ts := .Values.tailscale }}
+# OAuth client for the Tailscale operator, synced from Bitwarden.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: operator-oauth
+  namespace: {{ $ts.namespace }}
+spec:
+  refreshInterval: 1h
+  secretStoreRef: { kind: ClusterSecretStore, name: bitwarden }
+  target: { name: operator-oauth, creationPolicy: Owner }
+  data:
+    - secretKey: client_id
+      remoteRef: { key: {{ $ts.oauthClientIdKey }} }
+    - secretKey: client_secret
+      remoteRef: { key: {{ $ts.oauthClientSecretKey }} }
+{{- range $name, $i := .Values.adminIngress }}
+{{- if $i.enabled }}
+---
+# {{ $name }} is reachable only on the tailnet, at https://{{ $name }}-{{ $ts.hostSuffix }}.<tailnet>.ts.net
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $name }}-tailnet
+  namespace: {{ $i.namespace }}
+  annotations:
+    tailscale.com/tags: tag:k8s-admin
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: {{ $i.service }}
+      port: { number: {{ $i.port }} }
+  tls:
+    - hosts: [{{ $name }}-{{ $ts.hostSuffix }}]
+{{- end }}
+{{- end }}
+---
+# Created here so the OAuth secret can sync before the operator (wave -7) installs.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $ts.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false

@@ -1,0 +1,23 @@
+{{- $pg := .Values.postgres }}
+{{- if $pg.tailnet.enabled }}
+# Exposed only on the tailnet by the Tailscale operator; ACLs in terraform/global/tailscale.tf decide who connects.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $pg.name }}-tailnet
+  labels:
+    {{- include "agele-data.labels" . | nindent 4 }}
+  annotations:
+    tailscale.com/expose: "true"
+    tailscale.com/hostname: {{ $pg.tailnet.hostname | default (printf "%s-%s" $pg.name .Release.Namespace) | quote }}
+    tailscale.com/tags: tag:k8s-db
+spec:
+  type: ClusterIP
+  selector:
+    cnpg.io/cluster: {{ $pg.name }}
+    cnpg.io/instanceRole: primary
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+{{- end }}
