@@ -3,9 +3,8 @@ data "cloudflare_zone" "this" {
 }
 
 locals {
-  zone_id = data.cloudflare_zone.this.zone_id
-  # Production API hostname plus every staging hostname under the zone.
-  api_hosts = ["api.${var.domain}", "api.staging.${var.domain}"]
+  zone_id   = data.cloudflare_zone.this.zone_id
+  api_hosts = ["api.${var.domain}", "staging-api.${var.domain}"]
 }
 
 # Edge TLS: full strict, TLS 1.2+, HTTPS only.
@@ -78,6 +77,31 @@ resource "cloudflare_ruleset" "rate_limit" {
         period              = 60
         requests_per_period = var.api_rate_limit_per_minute
         mitigation_timeout  = 60
+      }
+    },
+  ]
+}
+
+# One web origin: www redirects to the apex, which is the only origin the API allows (CORS) and Privy lists.
+resource "cloudflare_ruleset" "redirects" {
+  zone_id     = local.zone_id
+  name        = "agele redirects"
+  description = "www to apex"
+  kind        = "zone"
+  phase       = "http_request_dynamic_redirect"
+  rules = [
+    {
+      description = "www.${var.domain} to ${var.domain}"
+      expression  = "(http.host eq \"www.${var.domain}\")"
+      action      = "redirect"
+      action_parameters = {
+        from_value = {
+          status_code           = 301
+          preserve_query_string = true
+          target_url = {
+            expression = "concat(\"https://${var.domain}\", http.request.uri.path)"
+          }
+        }
       }
     },
   ]
