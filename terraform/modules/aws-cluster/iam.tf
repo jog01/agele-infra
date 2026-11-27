@@ -69,9 +69,11 @@ resource "aws_iam_role_policy" "pg_backup" {
   policy = data.aws_iam_policy_document.pg_backup.json
 }
 
+# The live cluster and the side-by-side restore cluster (docs/operations.md) share the archive.
 resource "aws_eks_pod_identity_association" "pg_backup" {
+  for_each        = toset([var.postgres_cluster_name, "${var.postgres_cluster_name}-restore"])
   cluster_name    = module.eks.cluster_name
   namespace       = var.postgres_namespace
-  service_account = var.postgres_cluster_name
+  service_account = each.value
   role_arn        = aws_iam_role.pg_backup.arn
 }
