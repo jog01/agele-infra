@@ -16,6 +16,15 @@ resource "aws_kms_key" "this" {
   tags                    = local.tags
 }
 
+# EC2 Auto Scaling launches the nodes, so its service-linked role must be able to use the
+# EBS key for their root volumes (docs/go-live.md creates the role on a fresh account).
+resource "aws_kms_grant" "autoscaling_ebs" {
+  name              = "${var.name}-autoscaling-ebs"
+  key_id            = aws_kms_key.this["ebs"].key_id
+  grantee_principal = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+  operations        = ["Encrypt", "Decrypt", "ReEncryptFrom", "ReEncryptTo", "GenerateDataKey", "GenerateDataKeyWithoutPlaintext", "DescribeKey", "CreateGrant"]
+}
+
 resource "aws_kms_alias" "this" {
   for_each      = aws_kms_key.this
   name          = "alias/${var.name}-${each.key}"
@@ -104,6 +113,8 @@ module "eks" {
 
   eks_managed_node_groups = {
     default = {
+      # Referencing the grant orders it before the first node launches with the encrypted root volume.
+      tags           = merge(local.tags, { "agele.xyz/ebs-kms-grant" = aws_kms_grant.autoscaling_ebs.grant_id })
       ami_type       = "BOTTLEROCKET_x86_64"
       instance_types = var.node_instance_types
       min_size       = var.node_min_size

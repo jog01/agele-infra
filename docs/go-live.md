@@ -27,7 +27,10 @@ flowchart TD
 
 ## 1. Accounts and state bucket
 
-1. **AWS**: one account per environment is best (AWS Organizations); one account with both is fine to start. Create an admin IAM role you assume for Terraform.
+1. **AWS**: one account per environment is best (AWS Organizations); one account with both is fine to start. Create an admin IAM role you assume for Terraform. On a fresh account, create the Auto Scaling service-linked role, which the nodes' KMS grant names (an "already exists" error is fine):
+   ```bash
+   aws iam create-service-linked-role --aws-service-name autoscaling.amazonaws.com
+   ```
 2. **Cloudflare**: add `agele.xyz` as a zone and change the registrar's nameservers to Cloudflare's. Create an API token with *Zone: DNS Edit, Zone WAF Edit, Zone Settings Edit* on `agele.xyz` and *Account: Cloudflare Tunnel Edit*. Note the account ID.
 3. **Tailscale**: create the tailnet (or use the existing one). Create an OAuth client for Terraform with the `policy_file` and `oauth_keys` scopes.
 4. **Bitwarden**: enable Secrets Manager on the organization. Create projects `agele-staging` and `agele-production`, and one machine account per project with read access to only that project.
@@ -107,7 +110,9 @@ kubectl -n external-secrets create secret generic bitwarden-access-token \
   --from-literal=token='<agele-staging machine account access token>'
 
 helm repo add argo https://argoproj.github.io/argo-helm
-helm install argocd argo/argo-cd --version 10.20.0 -n argocd --create-namespace -f platform/argo-cd.yaml
+# First set TAILNET in environments/staging/platform/argo-cd.yaml (your tailnet's ts.net name).
+helm install argocd argo/argo-cd --version 10.20.0 -n argocd --create-namespace \
+  -f platform/argo-cd.yaml -f environments/staging/platform/argo-cd.yaml
 kubectl apply -f bootstrap/staging.yaml
 ```
 
@@ -130,15 +135,15 @@ Done when:
 ## 8. Smoke test
 
 ```bash
-curl -s https://api.staging.agele.xyz/health            # {"status":"ok",...}
-websocat wss://api.staging.agele.xyz/ws                 # connects, receives heartbeats
+curl -s https://staging-api.agele.xyz/health            # {"status":"ok",...}
+websocat wss://staging-api.agele.xyz/ws                 # connects, receives heartbeats
 open https://staging.agele.xyz
 ```
 
-Then point the Helius webhook at `https://api.staging.agele.xyz/v1/webhooks/helius` (`bun run helius:sync` in `jog01/agele` with the staging key), sign in with Privy, place a small trade and check it shows in the portfolio.
+Then point the Helius webhook at `https://staging-api.agele.xyz/v1/webhooks/helius` (`bun run helius:sync` in `jog01/agele` with the staging key), sign in with Privy, place a small trade and check it shows in the portfolio.
 
 Also check what must fail:
-- `curl https://api.staging.agele.xyz/health` from a script in a loop past 600 requests a minute returns `429`;
+- `curl https://staging-api.agele.xyz/health` from a script in a loop past 600 requests a minute returns `429`;
 - `psql "host=<anything public> ..."` has nothing to connect to; Postgres is only on the tailnet.
 
 ## 9. Close the public API endpoint
@@ -153,7 +158,7 @@ From now on `kubectl` only works on the tailnet.
 
 ## 10. Point DNS and launch
 
-For production, repeat steps 3-9 with `envs/production` and `environments/production`. The production tunnel creates the `agele.xyz`, `www.agele.xyz` and `api.agele.xyz` records, so production goes live when its `cloudflared` connects. Before that:
+For production, repeat steps 3-9 with `envs/production` and `environments/production`. The production tunnel creates the `agele.xyz`, `www.agele.xyz` (redirected to the apex at the edge) and `api.agele.xyz` records, so production goes live when its `cloudflared` connects. Before that:
 
 - [ ] Staging ran for at least a week with no manual changes.
 - [ ] A point-in-time restore was rehearsed on staging ([operations](operations.md#restore-postgres-to-a-point-in-time)).
