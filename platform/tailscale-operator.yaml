@@ -1,0 +1,6 @@
+# OAuth credentials come from the operator-oauth Secret (charts/platform-config).
+operatorConfig:
+  defaultTags: ["tag:k8s-operator"]
+# kubectl reaches the API server through the operator over the tailnet.
+apiServerProxyConfig:
+  mode: "true"

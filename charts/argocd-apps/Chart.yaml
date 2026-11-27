@@ -1,0 +1,5 @@
+apiVersion: v2
+name: argocd-apps
+description: "App-of-apps for one environment - platform operators, cluster config, Agele data and the Agele app, in sync-wave order."
+type: application
+version: 0.1.0

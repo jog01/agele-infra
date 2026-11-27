@@ -1,0 +1,165 @@
+{{- range $name, $c := .Values.components }}
+{{- if $c.enabled }}
+{{- $backend := eq $c.kind "backend" }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agele-{{ $name }}
+  labels:
+    {{- include "agele.labels" $ | nindent 4 }}
+    {{- include "agele.selector" $name | nindent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+spec:
+  {{- if not $c.autoscaling.enabled }}
+  replicas: {{ $c.replicas }}
+  {{- end }}
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  selector:
+    matchLabels:
+      {{- include "agele.selector" $name | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "agele.selector" $name | nindent 8 }}
+        app.kubernetes.io/part-of: agele
+        app.kubernetes.io/component: {{ $name }}
+        {{- if $backend }}
+        agele.xyz/postgres-client: "true"
+        agele.xyz/redis-client: "true"
+        {{- end }}
+      annotations:
+        checksum/config: {{ toJson $.Values.config | sha256sum | trunc 16 }}
+    spec:
+      serviceAccountName: agele
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml $.Values.podSecurityContext | nindent 8 }}
+      terminationGracePeriodSeconds: {{ $c.terminationGracePeriodSeconds | default 30 }}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: {{ $.Values.topologyKey }}
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              {{- include "agele.selector" $name | nindent 14 }}
+      containers:
+        - name: {{ $name }}
+          {{- if $backend }}
+          image: {{ include "agele.backendImage" (dict "root" $ "target" $c.target) }}
+          {{- else }}
+          image: {{ printf "%s:%s" $.Values.image.webRepository (required "image.webTag is required" $.Values.image.webTag) }}
+          {{- end }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          {{- if $backend }}
+          envFrom:
+            {{- include "agele.backendEnvFrom" $ | nindent 12 }}
+          {{- end }}
+          env:
+            {{- if $backend }}
+            {{- include "agele.backendEnv" $ | nindent 12 }}
+            - name: OTEL_SERVICE_NAME
+              value: {{ $c.otelServiceName }}
+            {{- if $c.port }}
+            - name: PORT
+              value: {{ $c.port | quote }}
+            {{- end }}
+            {{- else }}
+            - name: PORT
+              value: {{ $c.port | quote }}
+            - name: HOSTNAME
+              value: 0.0.0.0
+            - name: NEXT_TELEMETRY_DISABLED
+              value: "1"
+            {{- end }}
+            {{- range $k, $v := $c.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+          {{- if $c.port }}
+          ports:
+            - name: http
+              containerPort: {{ $c.port }}
+          {{- end }}
+          {{- if $c.health }}
+          readinessProbe:
+            httpGet: { path: {{ $c.health }}, port: http }
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: {{ $c.health }}, port: http }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 6
+          {{- end }}
+          resources:
+            {{- toYaml $c.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml $.Values.containerSecurityContext | nindent 12 }}
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            {{- if not $backend }}
+            - { name: next-cache, mountPath: /app/.next/cache }
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 256Mi }
+        {{- if not $backend }}
+        - name: next-cache
+          emptyDir: { sizeLimit: 512Mi }
+        {{- end }}
+{{- if $c.port }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agele-{{ $name }}
+  labels:
+    {{- include "agele.labels" $ | nindent 4 }}
+    {{- include "agele.selector" $name | nindent 4 }}
+spec:
+  selector:
+    {{- include "agele.selector" $name | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ $c.port }}
+      targetPort: http
+{{- end }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: agele-{{ $name }}
+  labels:
+    {{- include "agele.labels" $ | nindent 4 }}
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      {{- include "agele.selector" $name | nindent 6 }}
+{{- if $c.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: agele-{{ $name }}
+  labels:
+    {{- include "agele.labels" $ | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: agele-{{ $name }}
+  minReplicas: {{ $c.autoscaling.minReplicas }}
+  maxReplicas: {{ $c.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: {{ $c.autoscaling.cpu }} }
+{{- end }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,10 @@
+cloud: aws
+storageClass:
+  # terraform output ebs_kms_key_arn (terraform/envs/production)
+  kmsKeyId: ""
+bitwarden:
+  # Bitwarden Secrets Manager: organization id and the agele-production project id.
+  organizationID: "00000000-0000-0000-0000-000000000000"
+  projectID: "00000000-0000-0000-0000-000000000000"
+tailscale:
+  hostSuffix: production

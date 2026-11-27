@@ -1,0 +1,12 @@
+domain: staging.agele.xyz
+image:
+  # Git SHAs of jog01/agele and jog01/agele-web. Bumped by PR from their publish workflows.
+  backendTag: "sha-0000000"
+  webTag: "staging-sha-0000000"
+config:
+  LOG_LEVEL: debug
+components:
+  api: { autoscaling: { minReplicas: 1 } }
+  ws: { autoscaling: { minReplicas: 1 } }
+  worker: { autoscaling: { minReplicas: 1 } }
+  web: { autoscaling: { minReplicas: 1 } }

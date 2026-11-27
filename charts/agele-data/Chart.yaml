@@ -1,0 +1,6 @@
+apiVersion: v2
+name: agele-data
+description: "Agele stateful services - CloudNativePG PostgreSQL with point-in-time backups, and Redis for BullMQ, pub/sub and leaderboards."
+type: application
+version: 0.1.0
+kubeVersion: ">=1.30.0-0"

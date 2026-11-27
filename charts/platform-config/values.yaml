@@ -1,0 +1,29 @@
+# aws (EBS CSI) or gcp (PD CSI). Picks the encrypted StorageClass provisioner.
+cloud: aws
+
+storageClass:
+  name: gp3-encrypted
+  # AWS: KMS key ARN from terraform output ebs_kms_key_arn. GCP: CMEK key resource name.
+  kmsKeyId: ""
+
+bitwarden:
+  # Bitwarden Secrets Manager organization and the project for this environment.
+  organizationID: ""
+  projectID: ""
+  apiURL: https://api.bitwarden.com
+  identityURL: https://identity.bitwarden.com
+  # The one secret created by hand at bootstrap (docs/go-live.md step 6).
+  accessTokenSecret: bitwarden-access-token
+  namespace: external-secrets
+
+tailscale:
+  namespace: tailscale
+  # Bitwarden keys holding the operator OAuth client (terraform/global output).
+  oauthClientIdKey: TAILSCALE_OPERATOR_CLIENT_ID
+  oauthClientSecretKey: TAILSCALE_OPERATOR_CLIENT_SECRET
+  # Tailnet hostname prefix, e.g. argocd-production.
+  hostSuffix: production
+
+adminIngress:
+  argocd: { enabled: true, namespace: argocd, service: argocd-server, port: 80 }
+  grafana: { enabled: true, namespace: monitoring, service: kube-prometheus-stack-grafana, port: 80 }

@@ -1,0 +1,73 @@
+{{- $root := . }}
+{{- define "argocd-apps.syncPolicy" }}
+syncPolicy:
+  {{- if .root.Values.autoSync }}
+  automated:
+    prune: {{ .root.Values.prune }}
+    selfHeal: true
+  {{- end }}
+  syncOptions:
+    - CreateNamespace=true
+    - ServerSideDiff=true
+    {{- if .app.serverSideApply }}
+    - ServerSideApply=true
+    {{- end }}
+  retry:
+    limit: 5
+    backoff: { duration: 10s, factor: 2, maxDuration: 5m }
+{{- end }}
+{{- range $name, $app := .Values.operators }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ $name }}
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ $app.wave | quote }}
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: {{ $root.Values.project }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ $app.namespace }}
+  sources:
+    - repoURL: {{ $app.repoURL }}
+      chart: {{ $app.chart }}
+      targetRevision: {{ $app.version }}
+      helm:
+        releaseName: {{ $app.releaseName | default $name }}
+        valueFiles:
+          - $values/platform/{{ $name }}.yaml
+          - $values/environments/{{ $root.Values.environment }}/platform/{{ $name }}.yaml
+        ignoreMissingValueFiles: true
+    - repoURL: {{ $root.Values.repoURL }}
+      targetRevision: {{ $root.Values.targetRevision }}
+      ref: values
+  {{- include "argocd-apps.syncPolicy" (dict "root" $root "app" $app) | nindent 2 }}
+{{- end }}
+{{- range $name, $app := .Values.local }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ $name }}
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ $app.wave | quote }}
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: {{ $root.Values.project }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ $app.namespace }}
+  source:
+    repoURL: {{ $root.Values.repoURL }}
+    targetRevision: {{ $root.Values.targetRevision }}
+    path: {{ $app.path }}
+    helm:
+      releaseName: {{ $name }}
+      valueFiles:
+        - ../../environments/{{ $root.Values.environment }}/{{ $name }}.yaml
+  {{- include "argocd-apps.syncPolicy" (dict "root" $root "app" $app) | nindent 2 }}
+{{- end }}

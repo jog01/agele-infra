@@ -1,0 +1,21 @@
+# Root app for staging. Applied once by hand (docs/go-live.md); Argo CD then manages everything from git.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  source:
+    repoURL: https://github.com/jog01/agele-infra.git
+    targetRevision: main
+    path: charts/argocd-apps
+    helm:
+      valuesObject:
+        environment: staging
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }

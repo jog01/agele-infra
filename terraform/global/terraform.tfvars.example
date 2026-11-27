@@ -1,0 +1,2 @@
+tailnet = "<tailnet name>"
+admins  = ["jogeshwar@example.com"]

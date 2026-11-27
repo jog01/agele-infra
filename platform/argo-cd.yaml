@@ -1,0 +1,18 @@
+global:
+  domain: argocd.internal
+configs:
+  params:
+    # TLS terminates at the Tailscale ingress.
+    server.insecure: true
+  cm:
+    admin.enabled: false
+    # SSO: add GitHub OIDC under dex.config before go-live (docs/go-live.md).
+    exec.enabled: false
+  rbac:
+    policy.default: role:readonly
+server:
+  service: { type: ClusterIP }
+dex:
+  enabled: true
+notifications:
+  enabled: false

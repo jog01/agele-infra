@@ -1,0 +1,38 @@
+{{- if .Values.networkPolicy.enabled }}
+# Default deny for ingress in the namespace; the data chart and the rules below open what is needed.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  labels:
+    {{- include "agele.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+{{- range $name, $c := .Values.components }}
+{{- if and $c.enabled $c.port }}
+---
+# Public traffic reaches {{ $name }} only through the Cloudflare Tunnel connector.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agele-{{ $name }}-ingress
+  labels:
+    {{- include "agele.labels" $ | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "agele.selector" $name | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "agele.selector" "cloudflared" | nindent 14 }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $.Values.networkPolicy.monitoringNamespace }}
+      ports: [{ port: {{ $c.port }}, protocol: TCP }]
+{{- end }}
+{{- end }}
+{{- end }}

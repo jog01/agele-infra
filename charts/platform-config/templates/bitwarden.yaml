@@ -1,0 +1,69 @@
+{{- $bw := .Values.bitwarden }}
+# The External Secrets Bitwarden provider talks to bitwarden-sdk-server over TLS;
+# cert-manager issues that certificate from a cluster-local CA.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: bitwarden-selfsigned
+  namespace: {{ $bw.namespace }}
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: bitwarden-ca
+  namespace: {{ $bw.namespace }}
+spec:
+  isCA: true
+  commonName: bitwarden-ca
+  secretName: bitwarden-ca
+  privateKey: { algorithm: ECDSA, size: 256 }
+  issuerRef: { name: bitwarden-selfsigned, kind: Issuer }
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: bitwarden-ca
+  namespace: {{ $bw.namespace }}
+spec:
+  ca:
+    secretName: bitwarden-ca
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: bitwarden-tls-certs
+  namespace: {{ $bw.namespace }}
+spec:
+  secretName: bitwarden-tls-certs
+  dnsNames:
+    - bitwarden-sdk-server.{{ $bw.namespace }}.svc.cluster.local
+    - localhost
+  ipAddresses: ["127.0.0.1", "::1"]
+  privateKey: { algorithm: RSA, encoding: PKCS8, size: 2048 }
+  issuerRef: { name: bitwarden-ca, kind: Issuer }
+---
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: bitwarden
+spec:
+  provider:
+    bitwardensecretsmanager:
+      apiURL: {{ $bw.apiURL }}
+      identityURL: {{ $bw.identityURL }}
+      bitwardenServerSDKURL: https://bitwarden-sdk-server.{{ $bw.namespace }}.svc.cluster.local:9998
+      organizationID: {{ required "bitwarden.organizationID is required" $bw.organizationID | quote }}
+      projectID: {{ required "bitwarden.projectID is required" $bw.projectID | quote }}
+      caProvider:
+        type: Secret
+        name: bitwarden-tls-certs
+        namespace: {{ $bw.namespace }}
+        key: ca.crt
+      auth:
+        secretRef:
+          credentials:
+            name: {{ $bw.accessTokenSecret }}
+            namespace: {{ $bw.namespace }}
+            key: token

@@ -1,0 +1,97 @@
+# Requires in the cluster: CloudNativePG operator, barman-cloud plugin (and cert-manager),
+# External Secrets operator (for the generated Redis password). See platform/.
+
+postgres:
+  name: agele-pg
+  # CloudNativePG operand image; keep the major in step with jog01/agele docker-compose.yml.
+  image: ghcr.io/cloudnative-pg/postgresql:17.12-standard-trixie
+  # One primary and two replicas spread across three availability zones.
+  instances: 3
+  database: agele
+  owner: agele
+  storage:
+    size: 50Gi
+    # Encrypted (KMS) gp3 class created by platform/manifests/storageclass.yaml.
+    storageClass: gp3-encrypted
+  walStorage:
+    size: 20Gi
+    storageClass: gp3-encrypted
+  resources:
+    requests: { cpu: "1", memory: 2Gi }
+    limits: { memory: 2Gi }
+  # Quorum commit: a write is acknowledged once one replica has it, so a zone loss loses nothing.
+  synchronous:
+    method: any
+    number: 1
+    dataDurability: required
+  parameters:
+    max_connections: "200"
+    shared_buffers: 512MB
+    effective_cache_size: 1536MB
+    log_min_duration_statement: "500"
+    password_encryption: scram-sha-256
+    ssl_min_protocol_version: TLSv1.3
+  # Applied before CloudNativePG's defaults: plaintext TCP connections are refused.
+  pgHba:
+    - hostnossl all all 0.0.0.0/0 reject
+    - hostnossl all all ::/0 reject
+  topologyKey: topology.kubernetes.io/zone
+  monitoring:
+    podMonitor: true
+  # ServiceAccount annotations, e.g. an IRSA role. EKS Pod Identity needs none (see terraform/).
+  serviceAccountAnnotations: {}
+  backup:
+    enabled: true
+    # s3://<bucket>/<prefix>; the bucket comes from terraform output pg_backup_bucket.
+    destinationPath: ""
+    # Credentials come from the pod's IAM role (EKS Pod Identity or IRSA), never static keys.
+    inheritFromIAMRole: true
+    region: ""
+    # S3 server-side encryption for base backups and WAL.
+    encryption: aws:kms
+    retention: 30d
+    # Archive folder under destinationPath; default the cluster name. Change it after a restore.
+    serverName: ""
+    # Six-field cron (seconds first), UTC.
+    schedule: "0 0 3 * * *"
+  # Bootstrap from a backup instead of an empty database (docs/operations.md).
+  recovery:
+    enabled: false
+    # serverName the source archived under (its backup.serverName, default its cluster name).
+    serverName: ""
+    # ObjectStore holding the source archive; default this cluster's own.
+    objectStore: ""
+    # Empty restores to the end of the archive.
+    targetTime: ""
+  # Tailscale-only Service to the primary for operators (psql over the tailnet).
+  tailnet:
+    enabled: true
+    hostname: ""
+
+redis:
+  name: agele-redis
+  image: redis:7.4.12-alpine
+  storage:
+    size: 10Gi
+    storageClass: gp3-encrypted
+  resources:
+    requests: { cpu: 250m, memory: 1Gi }
+    limits: { memory: 1Gi }
+  # BullMQ requires noeviction; maxmemory stays below the container limit.
+  maxmemory: 768mb
+  auth:
+    # Generated once by an External Secrets Password generator and never rotated automatically.
+    generate: true
+    # Use an existing Secret with key "password" instead.
+    existingSecret: ""
+
+# Pods allowed to reach each store carry these labels (set by the agele chart).
+clientLabels:
+  postgres: { agele.xyz/postgres-client: "true" }
+  redis: { agele.xyz/redis-client: "true" }
+
+networkPolicy:
+  enabled: true
+  operatorNamespace: cnpg-system
+  monitoringNamespace: monitoring
+  tailscaleNamespace: tailscale

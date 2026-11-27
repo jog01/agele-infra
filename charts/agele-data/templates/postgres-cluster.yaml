@@ -1,0 +1,86 @@
+{{- $pg := .Values.postgres }}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ $pg.name }}
+  labels:
+    {{- include "agele-data.labels" . | nindent 4 }}
+spec:
+  description: Agele primary database
+  imageName: {{ $pg.image }}
+  instances: {{ $pg.instances }}
+  primaryUpdateStrategy: unsupervised
+  primaryUpdateMethod: switchover
+  enableSuperuserAccess: false
+  enablePDB: true
+  bootstrap:
+    {{- if $pg.recovery.enabled }}
+    # Point-in-time restore from the barman-cloud archive of another (or a previous) cluster.
+    recovery:
+      source: origin
+      database: {{ $pg.database }}
+      owner: {{ $pg.owner }}
+      {{- with $pg.recovery.targetTime }}
+      recoveryTarget:
+        targetTime: {{ . | quote }}
+      {{- end }}
+    {{- else }}
+    initdb:
+      database: {{ $pg.database }}
+      owner: {{ $pg.owner }}
+      dataChecksums: true
+    {{- end }}
+  {{- if $pg.recovery.enabled }}
+  externalClusters:
+    - name: origin
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters:
+          barmanObjectName: {{ $pg.recovery.objectStore | default (printf "%s-backups" $pg.name) }}
+          serverName: {{ required "postgres.recovery.serverName is required" $pg.recovery.serverName }}
+  {{- end }}
+  postgresql:
+    parameters:
+      {{- toYaml $pg.parameters | nindent 6 }}
+    pg_hba:
+      {{- toYaml $pg.pgHba | nindent 6 }}
+    synchronous:
+      {{- toYaml $pg.synchronous | nindent 6 }}
+  storage:
+    size: {{ $pg.storage.size }}
+    storageClass: {{ $pg.storage.storageClass }}
+  walStorage:
+    size: {{ $pg.walStorage.size }}
+    storageClass: {{ $pg.walStorage.storageClass }}
+  resources:
+    {{- toYaml $pg.resources | nindent 4 }}
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: {{ $pg.topologyKey }}
+      whenUnsatisfiable: DoNotSchedule
+      labelSelector:
+        matchLabels:
+          cnpg.io/cluster: {{ $pg.name }}
+  inheritedMetadata:
+    labels:
+      app.kubernetes.io/part-of: agele
+      app.kubernetes.io/component: postgres
+  {{- with $pg.serviceAccountAnnotations }}
+  serviceAccountTemplate:
+    metadata:
+      annotations:
+        {{- toYaml . | nindent 8 }}
+  {{- end }}
+  {{- if $pg.monitoring.podMonitor }}
+  monitoring:
+    enablePodMonitor: true
+  {{- end }}
+  {{- if $pg.backup.enabled }}
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: {{ $pg.name }}-backups
+        # A restored cluster must archive under a new name, never on top of its source.
+        serverName: {{ $pg.backup.serverName | default $pg.name }}
+  {{- end }}

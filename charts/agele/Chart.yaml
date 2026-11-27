@@ -1,0 +1,6 @@
+apiVersion: v2
+name: agele
+description: "Agele application - api, ws, worker, feed (jog01/agele), web (jog01/agele-web) and the Cloudflare Tunnel connector."
+type: application
+version: 0.1.0
+kubeVersion: ">=1.30.0-0"
